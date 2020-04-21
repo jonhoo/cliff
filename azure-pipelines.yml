@@ -2,6 +2,7 @@ jobs:
  - template: default.yml@templates
    parameters:
      minrust: 1.40.0 # non_exhaustive
+     codecov_token: $(CODECOV_TOKEN_SECRET)
  - job: no_std
    dependsOn: []
    displayName: "Compile-check on no_std target"
