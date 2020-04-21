@@ -230,6 +230,12 @@ fn load_iter() {
     assert_eq!(scale.next(), Some(4));
     assert_eq!(scale.next(), None);
 
+    // check that it continues to be terminated
+    assert_eq!(scale.next(), None);
+    // even after another "failed"
+    scale.failed();
+    assert_eq!(scale.next(), None);
+
     let mut scale = LoadIterator::search_from(500);
     assert_eq!(scale.next(), Some(500));
     assert_eq!(scale.next(), Some(1000));
@@ -242,6 +248,12 @@ fn load_iter() {
     assert_eq!(scale.next(), Some(3250));
     assert_eq!(scale.next(), None);
 
+    // check that it continues to be terminated
+    assert_eq!(scale.next(), None);
+    // even after another "failed"
+    scale.failed();
+    assert_eq!(scale.next(), None);
+
     let mut scale = LoadIterator::search_from_until(500, 1000);
     assert_eq!(scale.next(), Some(500));
     assert_eq!(scale.next(), Some(1000));
@@ -252,6 +264,12 @@ fn load_iter() {
     assert_eq!(scale.next(), Some(6000));
     scale.failed();
     assert_eq!(scale.next(), Some(5000));
+    scale.failed();
+    assert_eq!(scale.next(), None);
+
+    // check that it continues to be terminated
+    assert_eq!(scale.next(), None);
+    // even after another "failed"
     scale.failed();
     assert_eq!(scale.next(), None);
 }
