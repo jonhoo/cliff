@@ -12,17 +12,37 @@
 //! binary search between the upper and lower bounds, tightening the range until you reach the
 //! fidelity you want.
 //!
-//! So that you can easily support manual override, [`LoadIterator`] also supports a linear mode.
-//! In this mode, cliff just walks a pre-defined list of loads, and stops when the test runner
-//! indicates that the system is no longer keeping up.
+//! So that you can easily support manual override, the crate also provides [`LoadIterator`], which
+//! implements the same interface ([`CliffSearch`]) over a pre-defined list of loads. It simply
+//! stops iteration when the test runner indicates that the system is no longer keeping up through
+//! [`CliffSearch::overloaded`]. To dynamically switch between these depending on user choices, use
+//! `dyn CliffSearch`.
 //!
 //! # Examples
 //!
 //! ```rust
-//! use cliff::LoadIterator;
+//! use cliff::BinaryCliffSearcher;
+//! # let benchmark = |load: usize| -> bool { load > 12345 };
 //!
 //! // First, we set the starting load. This is the initial lower bound.
-//! let mut load = LoadIterator::search_from(500);
+//! let mut loads = BinaryCliffSearcher::new(500);
+//! while let Some(load) = loads.next() {
+//!     if !benchmark(load) {
+//!         loads.overloaded();
+//!     }
+//! }
+//!
+//! let supported = loads.estimate();
+//! println!("maximum supported load is between {} and {}", supported.start, supported.end);
+//! ```
+//!
+//! Stepping through the search bit by bit:
+//!
+//! ```rust
+//! use cliff::BinaryCliffSearcher;
+//!
+//! // First, we set the starting load. This is the initial lower bound.
+//! let mut load = BinaryCliffSearcher::new(500);
 //! // The initial lower bound is the first load we try.
 //! assert_eq!(load.next(), Some(500));
 //! // Since we did not say that the system was overloaded,
@@ -31,7 +51,7 @@
 //! // Same thing again.
 //! assert_eq!(load.next(), Some(2000));
 //! // Now, let's say the system did not keep up with the last load level:
-//! load.failed();
+//! load.overloaded();
 //! // At this point, cliff will begin a binary search between
 //! // 1000 (the highest supported load)
 //! // and
@@ -42,263 +62,56 @@
 //! // That means the cliff must lie between 1500 and 2000, so we try 1750:
 //! assert_eq!(load.next(), Some(1750));
 //! // And if that failed ...
-//! load.failed();
+//! load.overloaded();
 //! // ... then the cliff must lie between 1500 and 1750, and so on.
 //! // Ultimately, we reach the desired fidelity,
 //! // which defaults to half the initial lower bound (here 250).
 //! // At that point, no more benchmark runs are performed.
 //! assert_eq!(load.next(), None);
 //! ```
+//!
+//! Dynamically switching between search and a user-provided list:
+//!
+//! ```rust
+//! # extern crate alloc;
+//! # use alloc::{boxed::Box, vec::Vec};
+//! # let user_list: Vec<usize> = Vec::new();
+//! # let benchmark = |load: usize| -> bool { load > 12345 };
+//! use cliff::{BinaryCliffSearcher, CliffSearch, LoadIterator};
+//!
+//! let mut loads: Box<dyn CliffSearch> = if user_list.is_empty() {
+//!     Box::new(BinaryCliffSearcher::new(500))
+//! } else {
+//!     Box::new(LoadIterator::from(user_list))
+//! };
+//!
+//! // from here, the strategy is the same:
+//! while let Some(load) = loads.next() {
+//!     if !benchmark(load) {
+//!         loads.overloaded();
+//!     }
+//! }
+//!
+//! let supported = loads.estimate();
+//! println!("maximum supported load is between {} and {}", supported.start, supported.end);
+//! ```
 #![warn(missing_docs, missing_debug_implementations, rust_2018_idioms)]
 #![no_std]
 
-use core::borrow::Borrow;
+mod binary;
+mod linear;
 
-/// An iterator that helps determine maximum supported load for a system.
-///
-/// See the [crate-level documentation](..) for details.
-#[non_exhaustive]
-#[derive(Debug, Clone)]
-pub struct LoadIterator<I>(Inner<I>);
+pub use binary::BinaryCliffSearcher;
+pub use linear::LoadIterator;
 
-#[derive(Debug, Clone)]
-enum Inner<I> {
-    Iter {
-        max_in: core::ops::Range<usize>,
-        last: Option<usize>,
-        failed: bool,
-        iter: I,
-    },
-    Search {
-        max_in: core::ops::Range<usize>,
-        last: Option<usize>,
-        fidelity: usize,
-        failed: bool,
-        done: bool,
-    },
-}
-
-impl LoadIterator<core::slice::Iter<'static, usize>> {
-    /// Perform a load search starting at `start`, and ending when the maximum load has been
-    /// determined to within a range of `start / 2`.
-    pub fn search_from(start: usize) -> Self {
-        Self::search_from_until(start, start / 2)
-    }
-
-    /// Perform a load search starting at `start`, and ending when the maximum load has been
-    /// determined to within a range of `min_width`.
-    pub fn search_from_until(start: usize, min_width: usize) -> Self {
-        LoadIterator(Inner::Search {
-            max_in: start..usize::max_value(),
-            fidelity: min_width,
-            last: None,
-            failed: false,
-            done: false,
-        })
-    }
-}
-
-impl<I> LoadIterator<I> {
+/// A class of type that can estimate the performance cliff for a system.
+pub trait CliffSearch: Iterator<Item = usize> {
     /// Indicate that the system could not keep up with the previous load factor yielded by
     /// [`Iterator::next`].
     ///
     /// This will affect what value the next call to [`Iterator::next`] yields.
-    pub fn failed(&mut self) {
-        match self.0 {
-            Inner::Search { ref mut failed, .. } | Inner::Iter { ref mut failed, .. } => {
-                *failed = true;
-            }
-        }
-    }
+    fn overloaded(&mut self);
 
     /// Give the current estimate of the maximum load the system-under-test can support.
-    pub fn range(&self) -> core::ops::Range<usize> {
-        match self.0 {
-            Inner::Search { ref max_in, .. } | Inner::Iter { ref max_in, .. } => max_in.clone(),
-        }
-    }
-}
-
-impl<I, T> Iterator for LoadIterator<I>
-where
-    I: Iterator<Item = T>,
-    T: Borrow<usize>,
-{
-    type Item = usize;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
-    }
-}
-
-impl<I, T> Iterator for Inner<I>
-where
-    I: Iterator<Item = T>,
-    T: Borrow<usize>,
-{
-    type Item = usize;
-    fn next(&mut self) -> Option<Self::Item> {
-        match *self {
-            Inner::Iter {
-                ref mut max_in,
-                ref mut failed,
-                ref mut last,
-                ref mut iter,
-            } => {
-                if let Some(ref mut last) = *last {
-                    if *failed {
-                        max_in.end = *last;
-                    } else {
-                        max_in.start = *last;
-                    }
-                }
-
-                if *failed {
-                    return None;
-                }
-
-                let next = *iter.next()?.borrow();
-                *last = Some(next);
-                Some(next)
-            }
-            Inner::Search {
-                ref mut max_in,
-                ref mut failed,
-                ref mut last,
-                ref mut done,
-                fidelity,
-            } => {
-                if *done {
-                    return None;
-                }
-
-                if let Some(ref mut last) = *last {
-                    if *failed {
-                        // the last thing we tried failed, so it sets an upper limit for max load
-                        max_in.end = *last;
-                        *failed = false;
-                    } else {
-                        // the last thing succeeded, so that increases the lower limit
-                        max_in.start = *last;
-                    }
-
-                    let next = if max_in.end == usize::max_value() {
-                        // no upper limit, so exponential search
-                        2 * max_in.start
-                    } else {
-                        // bisect the range
-                        max_in.start + (max_in.end - max_in.start) / 2
-                    };
-
-                    // we only care about the max down to `fidelity`
-                    if max_in.end - max_in.start > fidelity {
-                        *last = next;
-                        Some(next)
-                    } else {
-                        *done = true;
-                        None
-                    }
-                } else {
-                    *last = Some(max_in.start);
-                    return *last;
-                }
-            }
-        }
-    }
-}
-
-impl<I, T> From<I> for LoadIterator<I::IntoIter>
-where
-    I: IntoIterator<Item = T>,
-    T: Borrow<usize>,
-{
-    fn from(v: I) -> Self {
-        LoadIterator(Inner::Iter {
-            max_in: 0..usize::max_value(),
-            last: None,
-            failed: false,
-            iter: v.into_iter(),
-        })
-    }
-}
-
-#[test]
-fn linear_nofail() {
-    let mut scale = LoadIterator::from(&[1, 2, 3, 4]);
-    assert_eq!(scale.next(), Some(1));
-    assert_eq!(scale.next(), Some(2));
-    assert_eq!(scale.next(), Some(3));
-    assert_eq!(scale.next(), Some(4));
-    assert_eq!(scale.next(), None);
-    assert_eq!(scale.range(), 4..usize::max_value());
-
-    // check that it continues to be terminated
-    assert_eq!(scale.next(), None);
-    // even after another "failed"
-    scale.failed();
-    assert_eq!(scale.next(), None);
-}
-
-#[test]
-fn linear_fail() {
-    let mut scale = LoadIterator::from(&[1, 2, 3, 4]);
-    assert_eq!(scale.next(), Some(1));
-    assert_eq!(scale.next(), Some(2));
-    scale.failed();
-    assert_eq!(scale.next(), None);
-    assert_eq!(scale.range(), 1..2);
-
-    // check that it continues to be terminated
-    assert_eq!(scale.next(), None);
-    // even after another "failed"
-    scale.failed();
-    assert_eq!(scale.next(), None);
-}
-
-#[test]
-fn search_from() {
-    let mut scale = LoadIterator::search_from(500);
-    assert_eq!(scale.next(), Some(500));
-    assert_eq!(scale.next(), Some(1000));
-    assert_eq!(scale.next(), Some(2000));
-    assert_eq!(scale.next(), Some(4000));
-    scale.failed();
-    assert_eq!(scale.next(), Some(3000));
-    assert_eq!(scale.next(), Some(3500));
-    scale.failed();
-    assert_eq!(scale.next(), Some(3250));
-    assert_eq!(scale.next(), None);
-    assert_eq!(scale.range(), 3250..3500);
-
-    // check that it continues to be terminated
-    assert_eq!(scale.next(), None);
-    // even after another "failed"
-    scale.failed();
-    assert_eq!(scale.next(), None);
-    // and the range is still the same
-    assert_eq!(scale.range(), 3250..3500);
-}
-
-#[test]
-fn search_from_until() {
-    let mut scale = LoadIterator::search_from_until(500, 1000);
-    assert_eq!(scale.next(), Some(500));
-    assert_eq!(scale.next(), Some(1000));
-    assert_eq!(scale.next(), Some(2000));
-    assert_eq!(scale.next(), Some(4000));
-    assert_eq!(scale.next(), Some(8000));
-    scale.failed();
-    assert_eq!(scale.next(), Some(6000));
-    scale.failed();
-    assert_eq!(scale.next(), Some(5000));
-    scale.failed();
-    assert_eq!(scale.next(), None);
-    assert_eq!(scale.range(), 4000..5000);
-
-    // check that it continues to be terminated
-    assert_eq!(scale.next(), None);
-    // even after another "failed"
-    scale.failed();
-    assert_eq!(scale.next(), None);
-    // and the range is still the same
-    assert_eq!(scale.range(), 4000..5000);
+    fn estimate(&self) -> core::ops::Range<usize>;
 }
