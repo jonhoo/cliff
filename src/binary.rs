@@ -166,4 +166,5 @@ fn through_trait() {
     assert_eq!(scale.next(), Some(5000));
     scale.overloaded();
     assert_eq!(scale.next(), None);
+    assert_eq!(scale.estimate(), 4000..5000);
 }
