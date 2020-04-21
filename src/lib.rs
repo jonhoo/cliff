@@ -222,20 +222,40 @@ where
 }
 
 #[test]
-fn load_iter() {
+fn linear_nofail() {
     let mut scale = LoadIterator::from(&[1, 2, 3, 4]);
     assert_eq!(scale.next(), Some(1));
     assert_eq!(scale.next(), Some(2));
     assert_eq!(scale.next(), Some(3));
     assert_eq!(scale.next(), Some(4));
     assert_eq!(scale.next(), None);
+    assert_eq!(scale.range(), 4..usize::max_value());
 
     // check that it continues to be terminated
     assert_eq!(scale.next(), None);
     // even after another "failed"
     scale.failed();
     assert_eq!(scale.next(), None);
+}
 
+#[test]
+fn linear_fail() {
+    let mut scale = LoadIterator::from(&[1, 2, 3, 4]);
+    assert_eq!(scale.next(), Some(1));
+    assert_eq!(scale.next(), Some(2));
+    scale.failed();
+    assert_eq!(scale.next(), None);
+    assert_eq!(scale.range(), 1..2);
+
+    // check that it continues to be terminated
+    assert_eq!(scale.next(), None);
+    // even after another "failed"
+    scale.failed();
+    assert_eq!(scale.next(), None);
+}
+
+#[test]
+fn search_from() {
     let mut scale = LoadIterator::search_from(500);
     assert_eq!(scale.next(), Some(500));
     assert_eq!(scale.next(), Some(1000));
@@ -247,13 +267,19 @@ fn load_iter() {
     scale.failed();
     assert_eq!(scale.next(), Some(3250));
     assert_eq!(scale.next(), None);
+    assert_eq!(scale.range(), 3250..3500);
 
     // check that it continues to be terminated
     assert_eq!(scale.next(), None);
     // even after another "failed"
     scale.failed();
     assert_eq!(scale.next(), None);
+    // and the range is still the same
+    assert_eq!(scale.range(), 3250..3500);
+}
 
+#[test]
+fn search_from_until() {
     let mut scale = LoadIterator::search_from_until(500, 1000);
     assert_eq!(scale.next(), Some(500));
     assert_eq!(scale.next(), Some(1000));
@@ -266,10 +292,13 @@ fn load_iter() {
     assert_eq!(scale.next(), Some(5000));
     scale.failed();
     assert_eq!(scale.next(), None);
+    assert_eq!(scale.range(), 4000..5000);
 
     // check that it continues to be terminated
     assert_eq!(scale.next(), None);
     // even after another "failed"
     scale.failed();
     assert_eq!(scale.next(), None);
+    // and the range is still the same
+    assert_eq!(scale.range(), 4000..5000);
 }
