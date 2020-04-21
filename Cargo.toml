@@ -1,0 +1,18 @@
+[package]
+name = "cliff"
+version = "0.1.0"
+authors = ["Jon Gjengset <jon@thesquareplanet.com>"]
+edition = "2018"
+license = "MIT OR Apache-2.0"
+
+readme = "README.md"
+description = "Find the load at which a benchmark falls over"
+repository = "https://github.com/jonhoo/cliff.git"
+
+keywords = ["vector","array","const"]
+categories = ["algorithms", "development-tools::profiling", "no-std"]
+
+[badges]
+azure-devops = { project = "jonhoo/jonhoo", pipeline = "cliff", build = "24" }
+codecov = { repository = "jonhoo/cliff", branch = "master", service = "github" }
+maintenance = { status = "passively-maintained" }

@@ -1,0 +1,28 @@
+jobs:
+ - template: default.yml@templates
+   parameters:
+     minrust: 1.40.0 # non_exhaustive
+ - job: no_std
+   dependsOn: []
+   displayName: "Compile-check on no_std target"
+   pool:
+     vmImage: ubuntu-latest
+   steps:
+     - template: install-rust.yml@templates
+       parameters:
+         rust: nightly
+         targets:
+          - thumbv7m-none-eabi
+          - thumbv6m-none-eabi
+     - bash: cargo check --target thumbv7m-none-eabi
+       displayName: cargo check --target thumbv7m-none-eabi
+     - bash: cargo check --target thumbv6m-none-eabi
+       displayName: cargo check --target thumbv6m-none-eabi
+
+resources:
+  repositories:
+    - repository: templates
+      type: github
+      name: crate-ci/azure-pipelines
+      ref: refs/heads/v0.4
+      endpoint: jonhoo
