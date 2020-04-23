@@ -5,11 +5,11 @@
 //! latency spikes, or whatever else is appropriate for the problem domain. Now, you want to find
 //! out how far you can push your system until it falls over. How do you do that?
 //!
-//! This crate provides one answer: binary search. The idea is simple: first, you double offered
-//! load until the system falls over. As long as the system keeps up, you raise the lower bound of
-//! your estimate for the maximum tolerated load. When the system no longer keeps up, that gives
-//! you an upper limit on the throughput your system can support. At that point, you perform a
-//! binary search between the upper and lower bounds, tightening the range until you reach the
+//! This crate provides one answer: [exponential search]. The idea is simple: first, you double
+//! offered load until the system falls over. As long as the system keeps up, you raise the lower
+//! bound of your estimate for the maximum tolerated load. When the system no longer keeps up, that
+//! gives you an upper limit on the throughput your system can support. At that point, you perform
+//! a binary search between the upper and lower bounds, tightening the range until you reach the
 //! fidelity you want.
 //!
 //! So that you can easily support manual override, the crate also provides [`LoadIterator`], which
@@ -18,14 +18,16 @@
 //! [`CliffSearch::overloaded`]. To dynamically switch between these depending on user choices, use
 //! `dyn CliffSearch`.
 //!
+//!   [exponential search]: https://en.wikipedia.org/wiki/Exponential_search
+//!
 //! # Examples
 //!
 //! ```rust
-//! use cliff::BinaryCliffSearcher;
+//! use cliff::ExponentialCliffSearcher;
 //! # let benchmark = |load: usize| -> bool { load > 12345 };
 //!
 //! // First, we set the starting load. This is the initial lower bound.
-//! let mut loads = BinaryCliffSearcher::new(500);
+//! let mut loads = ExponentialCliffSearcher::new(500);
 //! while let Some(load) = loads.next() {
 //!     if !benchmark(load) {
 //!         loads.overloaded();
@@ -39,10 +41,10 @@
 //! Stepping through the search bit by bit:
 //!
 //! ```rust
-//! use cliff::BinaryCliffSearcher;
+//! use cliff::ExponentialCliffSearcher;
 //!
 //! // First, we set the starting load. This is the initial lower bound.
-//! let mut load = BinaryCliffSearcher::new(500);
+//! let mut load = ExponentialCliffSearcher::new(500);
 //! // The initial lower bound is the first load we try.
 //! assert_eq!(load.next(), Some(500));
 //! // Since we did not say that the system was overloaded,
@@ -77,10 +79,10 @@
 //! # use alloc::{boxed::Box, vec::Vec};
 //! # let user_list: Vec<usize> = Vec::new();
 //! # let benchmark = |load: usize| -> bool { load > 12345 };
-//! use cliff::{BinaryCliffSearcher, CliffSearch, LoadIterator};
+//! use cliff::{ExponentialCliffSearcher, CliffSearch, LoadIterator};
 //!
 //! let mut loads: Box<dyn CliffSearch> = if user_list.is_empty() {
-//!     Box::new(BinaryCliffSearcher::new(500))
+//!     Box::new(ExponentialCliffSearcher::new(500))
 //! } else {
 //!     Box::new(LoadIterator::from(user_list))
 //! };
@@ -98,10 +100,10 @@
 #![warn(missing_docs, missing_debug_implementations, rust_2018_idioms)]
 #![no_std]
 
-mod binary;
+mod exponential;
 mod linear;
 
-pub use binary::BinaryCliffSearcher;
+pub use exponential::ExponentialCliffSearcher;
 pub use linear::LoadIterator;
 
 /// A class of type that can estimate the performance cliff for a system.

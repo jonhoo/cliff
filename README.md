@@ -12,13 +12,15 @@ else is appropriate for the problem domain. Now, you want to find out
 how far you can push your system until it falls over. How do you do
 that?
 
-This crate provides one answer: exponential search. The idea is simple:
-first, you double offered load until the system falls over. As long as
-the system keeps up, you raise the lower bound of your estimate for the
-maximum tolerated load. When the system no longer keeps up, that gives
-you an upper limit on the throughput your system can support. At that
-point, you perform a binary search between the upper and lower bounds,
-tightening the range until you reach the fidelity you want.
+This crate provides one answer: [exponential search]. The idea is
+simple: first, you double offered load until the system falls over. As
+long as the system keeps up, you raise the lower bound of your estimate
+for the maximum tolerated load. When the system no longer keeps up, that
+gives you an upper limit on the throughput your system can support. At
+that point, you perform a binary search between the upper and lower
+bounds, tightening the range until you reach the fidelity you want.
+
+  [exponential search]: https://en.wikipedia.org/wiki/Exponential_search
 
 ## License
 

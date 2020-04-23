@@ -1,10 +1,10 @@
 use super::CliffSearch;
 
-/// An iterator that determines the maximum supported load for a system by binary search.
+/// An iterator that determines the maximum supported load for a system by exponential search.
 ///
 /// See the [crate-level documentation](..) for details.
 #[derive(Debug, Clone)]
-pub struct BinaryCliffSearcher {
+pub struct ExponentialCliffSearcher {
     max_in: core::ops::Range<usize>,
     last: Option<usize>,
     fidelity: usize,
@@ -12,7 +12,7 @@ pub struct BinaryCliffSearcher {
     done: bool,
 }
 
-impl BinaryCliffSearcher {
+impl ExponentialCliffSearcher {
     /// Perform a load search starting at `start`, and ending when the maximum load has been
     /// determined to within a range of `start / 2`.
     pub fn new(start: usize) -> Self {
@@ -52,17 +52,17 @@ impl BinaryCliffSearcher {
     }
 }
 
-impl CliffSearch for BinaryCliffSearcher {
+impl CliffSearch for ExponentialCliffSearcher {
     fn overloaded(&mut self) {
-        BinaryCliffSearcher::overloaded(self)
+        ExponentialCliffSearcher::overloaded(self)
     }
 
     fn estimate(&self) -> core::ops::Range<usize> {
-        BinaryCliffSearcher::estimate(self)
+        ExponentialCliffSearcher::estimate(self)
     }
 }
 
-impl Iterator for BinaryCliffSearcher {
+impl Iterator for ExponentialCliffSearcher {
     type Item = usize;
     fn next(&mut self) -> Option<Self::Item> {
         if self.done {
@@ -104,7 +104,7 @@ impl Iterator for BinaryCliffSearcher {
 
 #[test]
 fn search_from() {
-    let mut scale = BinaryCliffSearcher::new(500);
+    let mut scale = ExponentialCliffSearcher::new(500);
     assert_eq!(scale.next(), Some(500));
     assert_eq!(scale.next(), Some(1000));
     assert_eq!(scale.next(), Some(2000));
@@ -128,7 +128,7 @@ fn search_from() {
 
 #[test]
 fn search_from_until() {
-    let mut scale = BinaryCliffSearcher::until(500, 1000);
+    let mut scale = ExponentialCliffSearcher::until(500, 1000);
     assert_eq!(scale.next(), Some(500));
     assert_eq!(scale.next(), Some(1000));
     assert_eq!(scale.next(), Some(2000));
@@ -153,7 +153,7 @@ fn search_from_until() {
 
 #[test]
 fn through_trait() {
-    let mut scale = BinaryCliffSearcher::until(500, 1000);
+    let mut scale = ExponentialCliffSearcher::until(500, 1000);
     let scale: &mut dyn CliffSearch = &mut scale;
     assert_eq!(scale.next(), Some(500));
     assert_eq!(scale.next(), Some(1000));
