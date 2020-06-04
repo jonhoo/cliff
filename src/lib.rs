@@ -12,6 +12,11 @@
 //! a binary search between the upper and lower bounds, tightening the range until you reach the
 //! fidelity you want.
 //!
+//! If you instead want to search for the _minimum_ for a given parameter, use
+//! [`BinaryMinSearcher`]. It performs a binary search for a parameter between `0` and the starting
+//! point you give. No exponential phase is needed for the min searchers, since `0` already bounds
+//! the minimum.
+//!
 //! So that you can easily support manual override, the crate also provides [`LoadIterator`], which
 //! implements the same interface ([`CliffSearch`]) over a pre-defined list of loads. It simply
 //! stops iteration when the test runner indicates that the system is no longer keeping up through
@@ -70,6 +75,8 @@
 //! // which defaults to half the initial lower bound (here 250).
 //! // At that point, no more benchmark runs are performed.
 //! assert_eq!(load.next(), None);
+//! // We can then ask the iterator what the final estimate is
+//! assert_eq!(load.estimate(), 1500..1750);
 //! ```
 //!
 //! Dynamically switching between search and a user-provided list:
@@ -100,9 +107,11 @@
 #![warn(missing_docs, missing_debug_implementations, rust_2018_idioms)]
 #![no_std]
 
+mod binmin;
 mod exponential;
 mod linear;
 
+pub use binmin::BinaryMinSearcher;
 pub use exponential::ExponentialCliffSearcher;
 pub use linear::LoadIterator;
 

@@ -168,3 +168,12 @@ fn through_trait() {
     assert_eq!(scale.next(), None);
     assert_eq!(scale.estimate(), 4000..5000);
 }
+
+#[test]
+fn immediate() {
+    let mut scale = ExponentialCliffSearcher::new(500);
+    assert_eq!(scale.next(), Some(500));
+    scale.overloaded();
+    assert_eq!(scale.next(), None);
+    assert_eq!(scale.estimate(), 500..500);
+}
